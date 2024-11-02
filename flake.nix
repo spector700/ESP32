@@ -28,19 +28,21 @@
           default = pkgs.mkShell {
             # The Nix packages provided in the environment
             packages = with pkgs; [
-              # Choose the build tools that you need
-              cmake
-              pkg-config
-              meson
-              ninja
+              # for pio cli and vscode extension
+              platformio-core
 
-              # Add some libraries
-              boost
-              fmt
+              # for running openocd manually
+              openocd
             ];
 
+            # clear LD_LIBRARY_PATH (NixOS/nixpkgs#263201, NixOS/nixpkgs#262775, NixOS/nixpkgs#262080)
+            # then add path for platformio debugging in vscode
+            # (ldd ~/.platformio/packages/toolchain-rp2040-earlephilhower/bin/arm-none-eabi-gdb)
+            runScript = "env LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath [ pkgs.ncurses5 ]} zsh";
+
             shellHook = ''
-              echo "welcome to C++" | ${pkgs.lolcat}/bin/lolcat
+              echo "welcome to ESP32" | ${pkgs.lolcat}/bin/lolcat
+              export PLATFORMIO_CORE_DIR=$PWD/.platformio
             '';
           };
         }
