@@ -33,6 +33,9 @@
 
               # for running openocd manually
               openocd
+
+              # formatting and stuff
+              clang-tools
             ];
 
             # clear LD_LIBRARY_PATH (NixOS/nixpkgs#263201, NixOS/nixpkgs#262775, NixOS/nixpkgs#262080)
