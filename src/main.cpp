@@ -1,14 +1,13 @@
-#include <Arduino.h>
+#include <Adafruit_PWMServoDriver.h>
 #include <PubSubClient.h>
 #include <WiFiManager.h>
 
 const char *ap_ssid = "ESP-Apollo-LUT";
-const char *mqtt_server = "192.168.1.100";
+const char *mqtt_server = "192.168.1.10";
 const char *mqtt_user = "mqtt";
 const char *mqtt_password = "pass";
 
 const int onboardLed = 2;
-String onboardLedState;
 
 // Mqtt client
 WiFiClient espClient;
@@ -19,10 +18,14 @@ const char *floor60_topic = "LUT/lights/floor60";
 bool floor60_state = false;
 const int floor60_pin = 26;
 
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40);
+// you can also call it with a different address you want
+// Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x41);
+
 void reconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
-    if (client.connect("APOLLO-MQTT-ESP", mqtt_user, mqtt_password)) {
+    if (client.connect(ap_ssid, mqtt_user, mqtt_password)) {
       Serial.println("connected");
       client.subscribe(floor60_topic);
 
@@ -49,7 +52,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
 
   if (strcmp(topic, floor60_topic) == 0) {
     floor60_state = (message == "ON");
-    digitalWrite(26, floor60_state ? HIGH : LOW);
+    // pwm.setPWM(0, 0, floor60_state ? 4095 : 0);
   }
 }
 
@@ -62,7 +65,7 @@ void setup() {
   pinMode(onboardLed, OUTPUT);
   digitalWrite(onboardLed, LOW);
 
-  // WiFiManager, Local intialization. Once its business is done, there is no
+  // WiFiManager, Local initialization. Once its business is done, there is no
   // need to keep it around
   WiFiManager wm;
 
@@ -83,13 +86,28 @@ void setup() {
     client.setServer(mqtt_server, 1883);
     client.setCallback(callback);
   }
-
-  pinMode(floor60_pin, OUTPUT);
+  pwm.begin();
+  pwm.setPWMFreq(1600); // This is the maximum PWM frequency for LED's
 }
+
+const int maxBrightness = 1024;
 
 void loop() {
   if (!client.connected()) {
     reconnect();
   }
   client.loop();
+
+  // Drive each PWM in a 'wave'
+  for (uint16_t i = 0; i < maxBrightness; i += 8) {
+    for (uint8_t pwmnum = 0; pwmnum < 16; pwmnum++) {
+      pwm.setPWM(pwmnum, 0, (i + (4096 / 16) * pwmnum) % 4096);
+    }
+  }
+
+  for (uint16_t i = maxBrightness; i > 0; i -= 8) {
+    for (uint8_t pwmnum = 0; pwmnum < 16; pwmnum++) {
+      pwm.setPWM(pwmnum, 0, (i + (4096 / 16) * pwmnum) % 4096);
+    }
+  }
 }
