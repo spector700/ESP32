@@ -1,4 +1,4 @@
-#include "lights.h"
+#include "lightManager.h"
 #include <Adafruit_PWMServoDriver.h>
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
@@ -18,7 +18,8 @@
 
 bool MQTT_HA_AUTO_DISCOVERY = false;
 
-#define MQTT_CONNECTION_TIMEOUT 5000
+#define MQTT_RECONNECT_TIMEOUT 5000
+#define MQTT_BUFFER_SIZE 2048
 
 #define AP_SSID "ESP-Apollo-LUT"
 #define MQTT_SERVER "192.168.1.10"
@@ -37,6 +38,7 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40);
 // you can also call it with a different address you want
 // Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x41);
 
+Light *floor30 = lightManager.addLight("Floor 30", 0, &pwm);
 Light *floor60 = lightManager.addLight("Floor 60", 1, &pwm);
 
 AsyncWebServer server(80);
@@ -77,58 +79,60 @@ void subscribeToMQTT(const char *topic) {
   }
 }
 
-/*
-  Function called to setup the MQTT auto discovery
-*/
+/**
+ * @brief Sets up MQTT Home Assistant auto discovery.
+ *
+ * This function configures and publishes the MQTT auto discovery messages for
+ * Home Assistant. It creates JSON payloads for the device and its lights, and
+ * publishes them to the appropriate MQTT topics. If auto discovery is disabled,
+ * it publishes empty payloads to remove the entities.
+ */
 void setupHaDiscovery() {
   char topic[50];
   snprintf(topic, sizeof(topic), "homeassistant/device/%s/config",
-           lightManager.getDeviceId().c_str());
+           lightManager.getDeviceId());
 
   if (MQTT_HA_AUTO_DISCOVERY) {
-    char buffer[2048];
+    char buffer[MQTT_BUFFER_SIZE];
     JsonDocument doc;
     doc.clear();
 
     // Json payload for the device
     JsonObject device = doc["device"].to<JsonObject>();
-    device["ids"] = lightManager.getDeviceId().c_str();
+    device["ids"] = lightManager.getDeviceId();
     device["name"] = "Apollo Launch Tower";
     device["mf"] = "Apollo";
     device["mdl"] = "ESP32";
-    device["cu"] = String("http://") + WiFi.localIP().toString() +
+    device["cu"] = "http://" + WiFi.localIP().toString() +
                    "/"; // web interface for device,
     JsonObject origin = doc["o"].to<JsonObject>();
     origin["name"] = "Apollo Launch Tower";
-    origin["url"] = String("http://") + WiFi.localIP().toString() +
+    origin["url"] = "http://" + WiFi.localIP().toString() +
                     "/"; // web interface for device,
 
-    // Json payload for the entity
+    // Json payload for the all lights entity
     JsonObject components = doc["cmps"].to<JsonObject>();
     JsonObject all =
         components[lightManager.getAllLightsUid()].to<JsonObject>();
     all["p"] = "light";
-    all["name"] = lightManager.getAllLightsName().c_str();
-    all["uniq_id"] = lightManager.getAllLightsUid().c_str();
+    all["name"] = lightManager.getAllLightsName();
+    all["uniq_id"] = lightManager.getAllLightsUid();
     all["icon"] = "mdi:lightbulb-group";
-    all["stat_t"] = lightManager.getAllLightsStatTopic().c_str();
-    all["cmd_t"] = lightManager.getAllLightsCmndTopic().c_str();
+    all["stat_t"] = lightManager.getAllLightsStatTopic();
+    all["cmd_t"] = lightManager.getAllLightsCmndTopic();
     all["brightness"] = "true";
     all["bri_scl"] = "100";
-    all["bri_stat_t"] = strcpy(
-        (char *)lightManager.getAllLightsStatTopic().c_str(), "/brightness");
-    all["bri_cmd_t"] = strcpy(
-        (char *)lightManager.getAllLightsCmndTopic().c_str(), "/brightness");
+    all["bri_stat_t"] = lightManager.getAllLightsStatTopic() + "/brightness";
+    all["bri_cmd_t"] = lightManager.getAllLightsCmndTopic() + "/brightness";
 
     for (const auto &light : lightManager.getAllLights()) {
       JsonObject docEnt = components[light->getUid()].to<JsonObject>();
       docEnt["p"] = "light";
-      docEnt["dev-cla"] = "switch";
-      docEnt["name"] = light->getName().c_str();
-      docEnt["uniq_id"] = light->getUid().c_str();
+      docEnt["name"] = light->getName();
+      docEnt["uniq_id"] = light->getUid();
       docEnt["icon"] = "mdi:light-flood-down";
-      docEnt["stat_t"] = light->getStatTopic().c_str();
-      docEnt["cmd_t"] = light->getCmndTopic().c_str();
+      docEnt["stat_t"] = light->getStatTopic();
+      docEnt["cmd_t"] = light->getCmndTopic();
     }
 
     if (serializeJson(doc, buffer) == 0) {
@@ -145,9 +149,9 @@ void setupHaDiscovery() {
 /**
  * @brief Attempts to connect to the MQTT broker.
  *
- * This function checks if the MQTT client is connected. If not, it attempts to
- * establish a connection using the provided credentials. If the connection is
- * successful, it subscribes to the specified MQTT topic. If the connection
+ * This function checks if the MQTT client is connected. If not, it attempts
+ * to establish a connection using the provided credentials. If the connection
+ * is successful, it subscribes to the specified MQTT topic. If the connection
  * fails, it prints error messages and retries after a delay.
  *
  * @note The function uses a timeout mechanism to avoid frequent connection
@@ -160,12 +164,13 @@ void connectMqtt() {
   // 2. Enough time has passed since last attempt
   if (!client.connected() &&
       ((millis() < lastMQTTConnection) || // Handle overflow
-       (millis() - lastMQTTConnection >= MQTT_CONNECTION_TIMEOUT))) {
+       (millis() - lastMQTTConnection >= MQTT_RECONNECT_TIMEOUT))) {
     DEBUG_PRINTLN("Attempting MQTT connection...");
     if (client.connect(AP_SSID, MQTT_USER, MQTT_PASS)) {
       DEBUG_PRINTLN(F("INFO: Successfully connected to MQTT broker"));
 
       subscribeToMQTT(lightManager.getAllLightsCmndTopic().c_str());
+      subscribeToMQTT(floor30->getCmndTopic().c_str());
       subscribeToMQTT(floor60->getCmndTopic().c_str());
     } else {
       DEBUG_PRINTLN(F("ERROR: MQTT connection failed"));
@@ -203,9 +208,11 @@ void handleMqttMessage(char *topic, byte *payload, unsigned int length) {
                   String(light->getCmndTopic().c_str()));
     if (strcmp(topic, light->getCmndTopic().c_str()) == 0) {
       light->setState((message == "ON"));
+      publishToMQTT(light->getStatTopic().c_str(),
+                    (light->getState() ? "ON" : "OFF"), true);
       break;
     } else {
-      DEBUG_PRINTLN(strcat("WARNING: No light found for topic: ", topic));
+      DEBUG_PRINTLN("WARNING: No light found for topic: " + String(topic));
     }
   }
 }
@@ -218,7 +225,7 @@ void handleMqttMessage(char *topic, byte *payload, unsigned int length) {
    Function called to setup the connection to the WiFi AP
 */
 void setupWiFi() {
-  DEBUG_PRINT(F("INFO: WiFi connecting to: "));
+  DEBUG_PRINTLN("INFO: WiFi connecting to: ");
   DEBUG_PRINTLN(AP_SSID);
 
   delay(10);
@@ -248,12 +255,12 @@ void setupWiFi() {
 
     client.setServer(MQTT_SERVER, 1883);
     // Increase the buffer size to handle larger messages
-    client.setBufferSize(2048);
+    client.setBufferSize(MQTT_BUFFER_SIZE);
     client.setCallback(handleMqttMessage);
 
     // Handle web callbacks for enabling or disabling discovery
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-      request->send(200, "text/plain", "Hello, world");
+      request->send(200, "text/plain", "Hi");
     });
     server.on("/discovery_on", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(200, "text/html",
