@@ -24,6 +24,15 @@
 
 enum EFFECTS { DEFUALT, FADE, BLINK, FLASH };
 
+// Helper function to convert to snake case
+std::string convertToSnakeCase(std::string str) {
+  // Convert to lowercase
+  std::transform(str.begin(), str.end(), str.begin(), ::tolower);
+  // Replace spaces with underscores
+  std::replace(str.begin(), str.end(), ' ', '_');
+  return str;
+}
+
 class Light {
 private:
   std::string m_name;
@@ -34,21 +43,12 @@ private:
   uint8_t m_pin;
   bool m_state;
 
-  // Helper function to convert to snake case
-  std::string toSnakeCase(std::string str) {
-    // Convert to lowercase
-    std::transform(str.begin(), str.end(), str.begin(), ::tolower);
-    // Replace spaces with underscores
-    std::replace(str.begin(), str.end(), ' ', '_');
-    return str;
-  }
-
 public:
   Light(const std::string &lightName, uint8_t &lightPin,
         const std::string &deviceId, Adafruit_PWMServoDriver &pwm)
       : m_name(lightName), m_pin(lightPin), m_state(false), m_pwm(&pwm) {
 
-    const std::string id_name = toSnakeCase(m_name);
+    const std::string id_name = convertToSnakeCase(m_name);
     m_uid = id_name + "_" + deviceId;
 
     // Create MQTT topics
@@ -105,10 +105,15 @@ public:
   void toggle() { setState(!m_state); }
 };
 
-class Lights {
+class LightManager {
 private:
   std::string device_id;
   std::vector<std::unique_ptr<Light>> lights;
+  std::string m_name_all_lights;
+  std::string m_uid_all_lights;
+  std::string m_cmnd_topic_all_lights;
+  std::string m_stat_topic_all_lights;
+  bool m_state_all_lights;
 
   std::string generateDeviceId() {
     uint64_t chipId = ESP.getEfuseMac(); // Get chip ID
@@ -119,8 +124,25 @@ private:
   }
 
 public:
-  Lights() { device_id = generateDeviceId(); }
+  LightManager()
+      : m_name_all_lights("All Lights"), m_state_all_lights(false),
+        device_id(generateDeviceId()) {
 
+    const std::string id_name = convertToSnakeCase(m_name_all_lights);
+    m_uid_all_lights = id_name + "_" + device_id;
+
+    // Create MQTT topics
+    m_cmnd_topic_all_lights = CMND_TOPIC + id_name + "/light";
+    m_stat_topic_all_lights = STAT_TOPIC + id_name + "/light";
+  }
+
+  /**
+   * @brief Adds a new light to the collection
+   * @param name The name of the light
+   * @param pin The pwm board pin for the light
+   * @param pwm The PWM driver for the light
+   * @return A pointer to the newly created Light object
+   */
   Light *addLight(const std::string &name, uint8_t pin,
                   Adafruit_PWMServoDriver *pwm) {
     auto light = std::unique_ptr<Light>(new Light(name, pin, device_id, *pwm));
@@ -129,6 +151,11 @@ public:
     return lightPtr;
   }
 
+  /**
+   * @brief Finds a light by its MQTT command topic
+   * @param cmndTopic The MQTT command topic of the light
+   * @return A pointer to the found Light object, or nullptr if not found
+   */
   Light *findLight(const std::string &cmndTopic) {
     for (const auto &light : lights) {
       if (light->getCmndTopic() == cmndTopic) {
@@ -137,10 +164,22 @@ public:
     }
     return nullptr;
   }
-
+  // Getters
+  const std::string &getAllLightsName() const { return m_name_all_lights; }
+  const std::string &getAllLightsUid() const { return m_uid_all_lights; }
+  const std::string &getAllLightsCmndTopic() const {
+    return m_cmnd_topic_all_lights;
+  }
+  const std::string &getAllLightsStatTopic() const {
+    return m_stat_topic_all_lights;
+  }
+  bool getAllLightsState() const { return m_state_all_lights; }
   const std::string &getDeviceId() const { return device_id; }
 
-  // Get all lights
+  /**
+   * @brief Returns a reference to the collection of lights
+   * @return A reference to the vector of Light objects
+   */
   const std::vector<std::unique_ptr<Light>> &getAllLights() const {
     return lights;
   }

@@ -25,7 +25,7 @@ bool MQTT_HA_AUTO_DISCOVERY = false;
 #define MQTT_USER "mqtt"
 #define MQTT_PASS "pass"
 
-Lights lightManager;
+LightManager lightManager;
 
 const int onboardLed = 2;
 
@@ -37,7 +37,6 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40);
 // you can also call it with a different address you want
 // Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x41);
 
-Light *allLights = lightManager.addLight("All Lights", 16, &pwm);
 Light *floor60 = lightManager.addLight("Floor 60", 1, &pwm);
 
 AsyncWebServer server(80);
@@ -106,28 +105,31 @@ void setupHaDiscovery() {
 
     // Json payload for the entity
     JsonObject components = doc["cmps"].to<JsonObject>();
-    JsonObject all = components[allLights->getUid()].to<JsonObject>();
+    JsonObject all =
+        components[lightManager.getAllLightsUid()].to<JsonObject>();
     all["p"] = "light";
-    all["name"] = allLights->getName().c_str();
-    all["uniq_id"] = allLights->getUid().c_str();
+    all["name"] = lightManager.getAllLightsName().c_str();
+    all["uniq_id"] = lightManager.getAllLightsUid().c_str();
     all["icon"] = "mdi:lightbulb-group";
-    all["stat_t"] = allLights->getStatTopic().c_str();
-    all["cmd_t"] = allLights->getCmndTopic().c_str();
+    all["stat_t"] = lightManager.getAllLightsStatTopic().c_str();
+    all["cmd_t"] = lightManager.getAllLightsCmndTopic().c_str();
     all["brightness"] = "true";
     all["bri_scl"] = "100";
-    all["bri_stat_t"] =
-        strcpy((char *)allLights->getStatTopic().c_str(), "/brightness");
-    all["bri_cmd_t"] =
-        strcpy((char *)allLights->getCmndTopic().c_str(), "/brightness");
+    all["bri_stat_t"] = strcpy(
+        (char *)lightManager.getAllLightsStatTopic().c_str(), "/brightness");
+    all["bri_cmd_t"] = strcpy(
+        (char *)lightManager.getAllLightsCmndTopic().c_str(), "/brightness");
 
-    JsonObject f60 = components[floor60->getUid()].to<JsonObject>();
-    f60["p"] = "light";
-    f60["dev-cla"] = "switch";
-    f60["name"] = floor60->getName().c_str();
-    f60["uniq_id"] = floor60->getUid().c_str();
-    f60["icon"] = "mdi:light-flood-down";
-    f60["stat_t"] = floor60->getStatTopic().c_str();
-    f60["cmd_t"] = floor60->getCmndTopic().c_str();
+    for (const auto &light : lightManager.getAllLights()) {
+      JsonObject docEnt = components[light->getUid()].to<JsonObject>();
+      docEnt["p"] = "light";
+      docEnt["dev-cla"] = "switch";
+      docEnt["name"] = light->getName().c_str();
+      docEnt["uniq_id"] = light->getUid().c_str();
+      docEnt["icon"] = "mdi:light-flood-down";
+      docEnt["stat_t"] = light->getStatTopic().c_str();
+      docEnt["cmd_t"] = light->getCmndTopic().c_str();
+    }
 
     if (serializeJson(doc, buffer) == 0) {
       DEBUG_PRINTLN(F("ERROR: Failed to serialize JSON"));
@@ -163,7 +165,7 @@ void connectMqtt() {
     if (client.connect(AP_SSID, MQTT_USER, MQTT_PASS)) {
       DEBUG_PRINTLN(F("INFO: Successfully connected to MQTT broker"));
 
-      subscribeToMQTT(allLights->getCmndTopic().c_str());
+      subscribeToMQTT(lightManager.getAllLightsCmndTopic().c_str());
       subscribeToMQTT(floor60->getCmndTopic().c_str());
     } else {
       DEBUG_PRINTLN(F("ERROR: MQTT connection failed"));
@@ -203,7 +205,7 @@ void handleMqttMessage(char *topic, byte *payload, unsigned int length) {
       light->setState((message == "ON"));
       break;
     } else {
-      DEBUG_PRINTLN("WARNING: No light found for topic: " + String(topic));
+      DEBUG_PRINTLN(strcat("WARNING: No light found for topic: ", topic));
     }
   }
 }
