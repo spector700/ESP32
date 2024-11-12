@@ -20,23 +20,23 @@ enum EFFECTS { DEFUALT, FADE, BLINK, FLASH };
 
 class Light {
 private:
-  std::string m_name;
-  std::string m_uid;
-  std::string m_cmnd_topic;
-  std::string m_stat_topic;
+  String m_name;
+  String m_uid;
+  String m_cmnd_topic;
+  String m_stat_topic;
   Adafruit_PWMServoDriver *m_pwm;
   uint8_t m_pin;
   bool m_state;
 
 public:
-  Light(const std::string &lightName, uint8_t lightPin,
-        const std::string &deviceId, Adafruit_PWMServoDriver &pwm);
+  Light(const String &lightName, uint8_t lightPin, const String &deviceId,
+        Adafruit_PWMServoDriver &pwm);
 
   // Getters
-  const std::string &getName() const;
-  const std::string &getUid() const;
-  const std::string &getCmndTopic() const;
-  const std::string &getStatTopic() const;
+  const String &getName() const;
+  const String &getUid() const;
+  const String &getCmndTopic() const;
+  const String &getStatTopic() const;
   uint8_t getPin() const;
   bool getState() const;
 

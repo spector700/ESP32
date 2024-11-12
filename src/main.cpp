@@ -92,6 +92,8 @@ void setupHaDiscovery() {
   snprintf(topic, sizeof(topic), "homeassistant/device/%s/config",
            lightManager.getDeviceId());
 
+  DEBUG_PRINTLN("INFO: Device ID: " + lightManager.getDeviceId());
+
   if (MQTT_HA_AUTO_DISCOVERY) {
     char buffer[MQTT_BUFFER_SIZE];
     JsonDocument doc;
@@ -105,6 +107,7 @@ void setupHaDiscovery() {
     device["mdl"] = "ESP32";
     device["cu"] = "http://" + WiFi.localIP().toString() +
                    "/"; // web interface for device,
+
     JsonObject origin = doc["o"].to<JsonObject>();
     origin["name"] = "Apollo Launch Tower";
     origin["url"] = "http://" + WiFi.localIP().toString() +
@@ -120,10 +123,7 @@ void setupHaDiscovery() {
     all["icon"] = "mdi:lightbulb-group";
     all["stat_t"] = lightManager.getAllLightsStatTopic();
     all["cmd_t"] = lightManager.getAllLightsCmndTopic();
-    all["brightness"] = "true";
-    all["bri_scl"] = "100";
-    all["bri_stat_t"] = lightManager.getAllLightsStatTopic() + "/brightness";
-    all["bri_cmd_t"] = lightManager.getAllLightsCmndTopic() + "/brightness";
+    all["effect"] = "true";
 
     for (const auto &light : lightManager.getAllLights()) {
       JsonObject docEnt = components[light->getUid()].to<JsonObject>();
@@ -133,6 +133,10 @@ void setupHaDiscovery() {
       docEnt["icon"] = "mdi:light-flood-down";
       docEnt["stat_t"] = light->getStatTopic();
       docEnt["cmd_t"] = light->getCmndTopic();
+      docEnt["brightness"] = "true";
+      docEnt["bri_scl"] = "100";
+      docEnt["bri_stat_t"] = light->getStatTopic() + "/brightness";
+      docEnt["bri_cmd_t"] = light->getCmndTopic() + "/brightness";
     }
 
     if (serializeJson(doc, buffer) == 0) {
@@ -210,11 +214,11 @@ void handleMqttMessage(char *topic, byte *payload, unsigned int length) {
       light->setState((message == "ON"));
       publishToMQTT(light->getStatTopic().c_str(),
                     (light->getState() ? "ON" : "OFF"), true);
-      break;
-    } else {
-      DEBUG_PRINTLN("WARNING: No light found for topic: " + String(topic));
+      return;
     }
   }
+
+  DEBUG_PRINTLN("WARNING: No light found for topic: " + String(topic));
 }
 
 ///////////////////////////////////////////////////////////////////////////

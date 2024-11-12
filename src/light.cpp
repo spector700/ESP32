@@ -1,13 +1,12 @@
 #include "light.h"
 #include "utils.h"
 #include <Adafruit_PWMServoDriver.h>
-#include <string>
 
-Light::Light(const std::string &lightName, uint8_t lightPin,
-             const std::string &deviceId, Adafruit_PWMServoDriver &pwm)
+Light::Light(const String &lightName, uint8_t lightPin, const String &deviceId,
+             Adafruit_PWMServoDriver &pwm)
     : m_name(lightName), m_pin(lightPin), m_state(false), m_pwm(&pwm) {
 
-  const std::string id_name = convertToSnakeCase(m_name);
+  const String id_name = convertToSnakeCase(m_name);
   m_uid = id_name + "_" + deviceId;
 
   // Create MQTT topics
@@ -15,10 +14,10 @@ Light::Light(const std::string &lightName, uint8_t lightPin,
   m_stat_topic = STAT_TOPIC + id_name + "/light";
 }
 
-const std::string &Light::getName() const { return m_name; }
-const std::string &Light::getUid() const { return m_uid; }
-const std::string &Light::getCmndTopic() const { return m_cmnd_topic; }
-const std::string &Light::getStatTopic() const { return m_stat_topic; }
+const String &Light::getName() const { return m_name; }
+const String &Light::getUid() const { return m_uid; }
+const String &Light::getCmndTopic() const { return m_cmnd_topic; }
+const String &Light::getStatTopic() const { return m_stat_topic; }
 uint8_t Light::getPin() const { return m_pin; }
 bool Light::getState() const { return m_state; }
 
