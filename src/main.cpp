@@ -105,13 +105,12 @@ void setupHaDiscovery() {
     device["name"] = "Apollo Launch Tower";
     device["mf"] = "Apollo";
     device["mdl"] = "ESP32";
-    device["cu"] = "http://" + WiFi.localIP().toString() +
-                   "/"; // web interface for device,
+    // web interface for device,
+    device["cu"] = "http://" + WiFi.localIP().toString() + "/";
 
     JsonObject origin = doc["o"].to<JsonObject>();
     origin["name"] = "Apollo Launch Tower";
-    origin["url"] = "http://" + WiFi.localIP().toString() +
-                    "/"; // web interface for device,
+    origin["url"] = "http://" + WiFi.localIP().toString() + "/";
 
     // Json payload for the all lights entity
     JsonObject components = doc["cmps"].to<JsonObject>();
